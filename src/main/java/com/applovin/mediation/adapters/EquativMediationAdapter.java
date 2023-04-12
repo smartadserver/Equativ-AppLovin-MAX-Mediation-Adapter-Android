@@ -1,8 +1,14 @@
 package com.applovin.mediation.adapters;
 
 import android.app.Activity;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import android.graphics.drawable.BitmapDrawable;
+import android.graphics.drawable.Drawable;
 import android.util.Log;
+import android.view.View;
 import android.view.ViewGroup;
+import android.widget.ImageView;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
@@ -12,27 +18,37 @@ import com.applovin.mediation.MaxReward;
 import com.applovin.mediation.adapter.MaxAdViewAdapter;
 import com.applovin.mediation.adapter.MaxAdapterError;
 import com.applovin.mediation.adapter.MaxInterstitialAdapter;
+import com.applovin.mediation.adapter.MaxNativeAdAdapter;
 import com.applovin.mediation.adapter.MaxRewardedAdapter;
 import com.applovin.mediation.adapter.listeners.MaxAdViewAdapterListener;
 import com.applovin.mediation.adapter.listeners.MaxInterstitialAdapterListener;
+import com.applovin.mediation.adapter.listeners.MaxNativeAdAdapterListener;
 import com.applovin.mediation.adapter.listeners.MaxRewardedAdapterListener;
 import com.applovin.mediation.adapter.parameters.MaxAdapterInitializationParameters;
 import com.applovin.mediation.adapter.parameters.MaxAdapterResponseParameters;
+import com.applovin.mediation.nativeAds.MaxNativeAd;
 import com.applovin.sdk.AppLovinSdk;
 import com.smartadserver.android.library.exception.SASAdTimeoutException;
 import com.smartadserver.android.library.exception.SASNoAdToDeliverException;
 import com.smartadserver.android.library.model.SASAdElement;
 import com.smartadserver.android.library.model.SASAdPlacement;
+import com.smartadserver.android.library.model.SASNativeAdElement;
+import com.smartadserver.android.library.model.SASNativeAdManager;
 import com.smartadserver.android.library.model.SASReward;
 import com.smartadserver.android.library.rewarded.SASRewardedVideoManager;
 import com.smartadserver.android.library.ui.SASAdView;
 import com.smartadserver.android.library.ui.SASBannerView;
 import com.smartadserver.android.library.ui.SASInterstitialManager;
+import com.smartadserver.android.library.ui.SASNativeAdMediaView;
 import com.smartadserver.android.library.util.SASConfiguration;
 import com.smartadserver.android.library.util.SASLibraryInfo;
 import com.smartadserver.android.library.util.SASUtil;
 
-public class EquativMediationAdapter extends MediationAdapterBase implements MaxAdViewAdapter, MaxInterstitialAdapter, MaxRewardedAdapter {
+import java.io.InputStream;
+import java.net.URL;
+import java.util.List;
+
+public class EquativMediationAdapter extends MediationAdapterBase implements MaxAdViewAdapter, MaxInterstitialAdapter, MaxRewardedAdapter, MaxNativeAdAdapter {
 
     @Nullable
     private SASBannerView bannerView = null;
@@ -42,6 +58,12 @@ public class EquativMediationAdapter extends MediationAdapterBase implements Max
 
     @Nullable
     private SASRewardedVideoManager rewardedVideoManager = null;
+
+    @Nullable
+    private SASNativeAdManager nativeAdManager = null;
+
+    @Nullable
+    private EquativMaxNativeAd equativMaxNativeAd = null;
 
     public EquativMediationAdapter(AppLovinSdk appLovinSdk) {
         super(appLovinSdk);
@@ -60,7 +82,7 @@ public class EquativMediationAdapter extends MediationAdapterBase implements Max
 
     @Override
     public String getAdapterVersion() {
-        return "1.0";
+        return "1.1";
     }
 
     @Override
@@ -78,6 +100,16 @@ public class EquativMediationAdapter extends MediationAdapterBase implements Max
         if (rewardedVideoManager != null) {
             rewardedVideoManager.reset();
             interstitialManager = null;
+        }
+
+        if (equativMaxNativeAd != null) {
+            equativMaxNativeAd.unregisterView();
+            equativMaxNativeAd = null;
+        }
+
+        if (nativeAdManager != null) {
+            nativeAdManager.onDestroy();
+            nativeAdManager = null;
         }
     }
 
@@ -383,6 +415,163 @@ public class EquativMediationAdapter extends MediationAdapterBase implements Max
             rewardedVideoManager.showRewardedVideo();
         } else {
             maxRewardedAdapterListener.onRewardedAdDisplayFailed(MaxAdapterError.AD_NOT_READY);
+        }
+    }
+
+    /// Native Ad Adapter Implementation
+
+    @Override
+    public void loadNativeAd(MaxAdapterResponseParameters maxAdapterResponseParameters, Activity activity, MaxNativeAdAdapterListener maxNativeAdAdapterListener) {
+        SASAdPlacement adPlacement = convertToAdPlacement(maxAdapterResponseParameters.getThirdPartyAdPlacementId());
+
+        if (adPlacement == null) {
+            Log.e(mediationTag(), "The PlacementId found is not a valid Equativ placement. This placement should be formatted like: <site id>/<page id>/<format id>[/<targeting string> (optional)] (ex: 123/456/789/targetingString or 123/456/789). The invalid found PlacementId string: " + maxAdapterResponseParameters.getThirdPartyAdPlacementId());
+            maxNativeAdAdapterListener.onNativeAdLoadFailed(new MaxAdapterError(MaxAdapterError.ERROR_CODE_INVALID_CONFIGURATION));
+            return;
+        }
+
+        // Configure Smart Display SDK with siteid
+        SASConfiguration.getSharedInstance().configure(activity, (int) adPlacement.getSiteId());
+
+        // Clean up if needed
+        if (equativMaxNativeAd != null) {
+            equativMaxNativeAd.unregisterView();
+            equativMaxNativeAd = null;
+        }
+
+        if (nativeAdManager != null) {
+            nativeAdManager.onDestroy();
+            nativeAdManager = null;
+        }
+
+        nativeAdManager = new SASNativeAdManager(activity, adPlacement);
+
+        nativeAdManager.setNativeAdListener(new SASNativeAdManager.NativeAdListener() {
+            @Override
+            public void onNativeAdLoaded(@NonNull SASNativeAdElement sasNativeAdElement) {
+                sasNativeAdElement.setOnClickListener((s, sasNativeAdElement1) -> maxNativeAdAdapterListener.onNativeAdClicked());
+
+                Bitmap iconBitmap = null;
+                if (sasNativeAdElement.getIcon() != null) {
+                    iconBitmap = EquativMediationAdapter.scaledBitmapFromUrl(
+                            sasNativeAdElement.getIcon().getUrl(),
+                            sasNativeAdElement.getIcon().getWidth(),
+                            sasNativeAdElement.getIcon().getHeight());
+                }
+
+                Bitmap coverBitmap = null;
+                if (sasNativeAdElement.getCoverImage() != null) {
+                    coverBitmap = EquativMediationAdapter.scaledBitmapFromUrl(sasNativeAdElement.getCoverImage().getUrl(), -1, -1);
+                }
+
+                Bitmap finalIconBitmap = iconBitmap;
+                Bitmap finalCoverBitmap = coverBitmap;
+
+                SASUtil.getMainLooperHandler().post(() -> {
+                    MaxNativeAd.MaxNativeAdImage iconImage = null;
+                    if (finalIconBitmap != null) {
+                        Drawable iconDrawable = new BitmapDrawable(activity.getResources(), finalIconBitmap);
+                        iconImage = new MaxNativeAd.MaxNativeAdImage(iconDrawable);
+                    }
+
+                    ImageView coverImageView = null;
+                    if (finalCoverBitmap != null) {
+                        coverImageView = new ImageView(activity);
+                        coverImageView.setImageBitmap(finalCoverBitmap);
+                    }
+
+                    SASNativeAdMediaView mediaView = null;
+                    if (sasNativeAdElement.getMediaElement() != null) {
+                        mediaView = new SASNativeAdMediaView(activity);
+                        mediaView.setNativeAdElement(sasNativeAdElement);
+                    }
+
+                    MaxNativeAd.Builder maxNativeAdBuilder = new MaxNativeAd.Builder()
+                            .setTitle(sasNativeAdElement.getTitle())
+                            .setBody(sasNativeAdElement.getBody())
+                            .setCallToAction(sasNativeAdElement.getCalltoAction())
+                            .setStarRating((double)sasNativeAdElement.getRating())
+                            .setIcon(iconImage)
+                            .setMediaView(mediaView != null ? mediaView : coverImageView);
+
+                    EquativMediationAdapter.this.equativMaxNativeAd = new EquativMaxNativeAd(maxNativeAdBuilder, sasNativeAdElement, maxNativeAdAdapterListener);
+
+                    maxNativeAdAdapterListener.onNativeAdLoaded(equativMaxNativeAd, null);
+                });
+            }
+
+            @Override
+            public void onNativeAdFailedToLoad(@NonNull Exception e) {
+                if (e instanceof SASNoAdToDeliverException) {
+                    maxNativeAdAdapterListener.onNativeAdLoadFailed(MaxAdapterError.NO_FILL);
+                } if (e instanceof SASAdTimeoutException) {
+                    maxNativeAdAdapterListener.onNativeAdLoadFailed(MaxAdapterError.TIMEOUT);
+                } else {
+                    maxNativeAdAdapterListener.onNativeAdLoadFailed(MaxAdapterError.UNSPECIFIED);
+                }
+            }
+        });
+
+        nativeAdManager.loadNativeAd();
+    }
+
+    @Nullable
+    private static Bitmap scaledBitmapFromUrl(@Nullable String url, int targetWidth, int targetHeight) {
+        Bitmap result = null;
+        try {
+            InputStream inputStream = (InputStream) new URL(url).getContent();
+            result = BitmapFactory.decodeStream(inputStream);
+            if (targetWidth > 0 && targetHeight > 0) {
+                double bWidth = result.getWidth();
+                double bHeight = result.getHeight();
+                double resizeRatio = Math.min(targetWidth / bWidth, targetHeight / bHeight);
+
+                result = Bitmap.createScaledBitmap(
+                        result,
+                        (int)(bWidth * resizeRatio),
+                        (int)(bHeight * resizeRatio),
+                        true
+                );
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+        return result;
+    }
+
+    private static class EquativMaxNativeAd extends MaxNativeAd {
+
+        @NonNull
+        private final SASNativeAdElement sasNativeAdElement;
+
+        @NonNull
+        private final MaxNativeAdAdapterListener maxNativeAdAdapterListener;
+
+        @Nullable
+        private ViewGroup container = null;
+
+        public EquativMaxNativeAd(@NonNull Builder builder,
+                                  @NonNull SASNativeAdElement sasNativeAdElement,
+                                  @NonNull MaxNativeAdAdapterListener maxNativeAdListener) {
+            super(builder);
+            this.sasNativeAdElement = sasNativeAdElement;
+            this.maxNativeAdAdapterListener = maxNativeAdListener;
+        }
+
+        @Override
+        public boolean prepareForInteraction(List<View> clickableView, ViewGroup container) {
+            this.container = container;
+            sasNativeAdElement.registerView(container, clickableView.toArray(new View[0]));
+            maxNativeAdAdapterListener.onNativeAdDisplayed(null);
+            return true;
+        }
+
+        private void unregisterView() {
+            SASUtil.getMainLooperHandler().post(() -> {
+                if (container != null) {
+                    sasNativeAdElement.unregisterView(container);
+                }
+            });
         }
     }
 }
