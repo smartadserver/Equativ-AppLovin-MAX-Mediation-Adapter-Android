@@ -42,13 +42,21 @@ import com.smartadserver.android.library.ui.SASInterstitialManager;
 import com.smartadserver.android.library.ui.SASNativeAdMediaView;
 import com.smartadserver.android.library.util.SASConfiguration;
 import com.smartadserver.android.library.util.SASLibraryInfo;
+import com.smartadserver.android.library.util.SASSecondaryImplementationInfo;
 import com.smartadserver.android.library.util.SASUtil;
 
 import java.io.InputStream;
 import java.net.URL;
 import java.util.List;
 
+/**
+ * This class is an implementation of all AppLovin mediation adapters compatible with Equativ Display SDK v7.x.
+ * If you are using using the Equativ Display SDK v8.0+, please check the adapter dedicated to this version here:
+ * https://github.com/smartadserver/Equativ-AppLovin-MAX-Mediation-Adapter-Android/displaysdk8
+ */
 public class EquativMediationAdapter extends MediationAdapterBase implements MaxAdViewAdapter, MaxInterstitialAdapter, MaxRewardedAdapter, MaxNativeAdAdapter {
+
+    private static final String ADAPTER_VERSION = "1.3";
 
     @Nullable
     private SASBannerView bannerView = null;
@@ -71,7 +79,11 @@ public class EquativMediationAdapter extends MediationAdapterBase implements Max
 
     @Override
     public void initialize(MaxAdapterInitializationParameters maxAdapterInitializationParameters, Activity activity, OnCompletionListener onCompletionListener) {
-        SASConfiguration.getSharedInstance().setPrimarySdk(false);
+        SASConfiguration.getSharedInstance().setSecondaryImplementationInfo(new SASSecondaryImplementationInfo(
+                "AppLovin",
+                AppLovinSdk.VERSION,
+                ADAPTER_VERSION
+        ));
         onCompletionListener.onCompletion(InitializationStatus.DOES_NOT_APPLY, null);
     }
 
@@ -82,7 +94,7 @@ public class EquativMediationAdapter extends MediationAdapterBase implements Max
 
     @Override
     public String getAdapterVersion() {
-        return "1.1";
+        return ADAPTER_VERSION;
     }
 
     @Override
