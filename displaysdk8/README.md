@@ -1,10 +1,10 @@
-Equativ - AppLovin MAX SDK Adapter for Display SDK v8.x
+Equativ - AppLovin MAX SDK Adapter for Display SDK v8.3+
 ==============================================
 
 Introduction
 ------------
-The _Equativ Display SDK v8.x_ can be used through _AppLovin MAX_ using the adapter provided in this repository for banner and interstitial. This adapter is compatible with:
-* _Equativ Display SDK_ v8.1+
+The _Equativ Display SDK v8.x_ can be used through _AppLovin MAX_ using the adapter provided in this repository for banner, interstitial and native ads. This adapter is compatible with:
+* _Equativ Display SDK_ v8.3+
 * _AppLovin MAX SDK_ v11.9.0
 
 Setup
@@ -15,6 +15,11 @@ Setup
 2) Install the _Equativ Display SDK_ by adding the `equativ-display-sdk` dependency to your _gradle_ file (more info in [the documentation](https://documentation.smartadserver.com/displaySDK/android/gettingstarted.html)).
 
 3) Checkout this repository and copy the `EquativMediationAdapter.java` class into your Android project. Keep the whole folders structure to be sure to validate the package name of the class.
+If you are building your application with the ```minifiedEnable true``` option, which usually obfuscates classnames, you __must__ add the following proguard rules (or equivalent) to your build pipeline to ensure that the adapter classes you imported remain __untouched__. Indeed, they are instantiated via reflection by the __Applovin MAX SDK__ and obfuscating them would prevent them from being used when mediation ads are fetched.
+
+```
+-keep class com.applovin.mediation.adapters.EquativMediationAdapter { public *; }
+```
 
 4) In your _AppLovin MAX_ interface, create a custom network to be able to target this mediation adapter. The _AppLovin MAX_ documentation about custom adapters can be found [here](https://dash.applovin.com/documentation/mediation/ui-max/networks/connect-networks), and custom adapter can be created [here](https://dash.applovin.com/o/mediation/networks/580541/customNetwork/create).
 

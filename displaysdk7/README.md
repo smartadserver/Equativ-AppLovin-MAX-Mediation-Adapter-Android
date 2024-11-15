@@ -4,7 +4,7 @@ Equativ - AppLovin MAX SDK Adapter for Display SDK v7.x
 Introduction
 ------------
 The _Smart Display SDK_ can be used through _AppLovin MAX_ using the adapter provided in this repository for banner, interstitial, rewarded video and native-ad. This adapter is compatible with:
-* _Smart Display SDK_ v7.24+
+* _Smart Display SDK_ v7.21+
 * _AppLovin MAX SDK_ v11.9.0
 
 Setup
